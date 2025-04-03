@@ -126,11 +126,13 @@ class Move:
 
 
 class Runner:
+    # Runs games of Cockroach Poker with the same players.
     types = ["COCKROACH", "BAT", "FLY", "FROG", "RAT", "SCORPION", "SPIDER", "STINKBUG"]
     deck = types * 8
 
     def __init__(self, model_names):
         self.players = {model_name: LlmPlayer(model_name) for model_name in model_names}  # map of player names -> Player objects.
+        self.losses = Counter()
         self.set_up_game()
 
     def chunk_cards_equally(self):
@@ -139,12 +141,15 @@ class Runner:
         for i in range(len(self.players)):
             yield self.deck[i*k+min(i, m):(i+1)*k+min(i+1, m)]
 
-    def set_up_game(self):
+    def set_up_game(self, starting_player=None):
         # Set up a new game by dealing out cards and picking a player to start.
         random.shuffle(self.deck)  # shuffle deck in-place.
         self.player_hands = {player: Counter(chunk) for (player, chunk) in zip(self.players.keys(), self.chunk_cards_equally())}  # map of player names -> player cards (hidden).
         self.player_revealed = {player: Counter() for player in self.players.keys()}  # map of player names -> table cards (revealed).
-        self.current_player = random.choice(list(self.players.keys()))  # pick random starting player.
+        if starting_player:
+            self.current_player = starting_player  # use provided starting player.
+        else:
+            self.current_player = random.choice(list(self.players.keys()))  # pick random starting player.
 
     def get_enumerated_cards(self, counter):
         # Return a string of enumerated cards in alphabetical order, e.g. "1x COCKROACH, 3x SCORPION, 1x STINKBUG."
@@ -178,7 +183,7 @@ class Runner:
         )
         raw_response = raw_response[raw_response.find("{"):raw_response.rfind("}")+1]  # trim to brackets.
         response = json.loads(raw_response)
-        print(self.current_player + " says: '" + response.get("reason", "[No reason given]") + "'")
+        print("> " + self.current_player + " says: '" + response.get("reason", "[No reason given]") + "'")
         return response
 
     def play_move(self, valid_targets, history):
@@ -325,6 +330,7 @@ class Runner:
             # Check if anyone has lost.
             losing_player, losing_reason = self.check_for_loser()
             if losing_player is not None:
+                self.losses[losing_player] += 1
                 print(f"Player {losing_player} loses: {losing_reason}!")
                 print("Face-up cards:")  # print revealed cards.
                 for player, revealed in self.player_revealed.items():
@@ -333,11 +339,25 @@ class Runner:
 
             # Otherwise, play a round.
             print(f"New round, {self.current_player} goes first.")
-            print(f"Player {self.current_player} hand: {self.get_enumerated_cards(self.player_hands[self.current_player])}.")
             round_loser, moves = self.play_round()
             losing_card = moves[-1].card
-            print(f"{round_loser} lost that round and takes the {losing_card}.\n\n")
+            print(f"{round_loser} lost that round and takes the {losing_card}.\n")
             history.extend(moves)
+        return history
+
+    def play_games(self, n):
+        all_history = []
+        for i in range(n):
+            print(f"Game {i+1} of {n}...")
+            history = self.play_game()
+            all_history.append(history)
+            print(f"Game {i+1} of {n} complete.")
+            losses_array = [f"{player}: {losses}" for player, losses in self.losses.items()]
+            print(f"  Losses: {", ".join(losses_array)}")
+            print("\n\n")
+        
 
 
-Runner(["llama3.1:8b", "gemma3:4b", "qwen2.5:7b"]).play_game()
+
+runner = Runner(["llama3.1:8b", "gemma3:4b", "qwen2.5:7b"])
+runner.play_games(2)

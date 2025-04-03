@@ -5,12 +5,7 @@ import traceback
 from ollama import generate
 
 
-class Player:
-    def play(self, game_state, actions):
-        pass
-
-
-class LlmPlayer(Player):
+class LlmPlayer():
     context = """
         Cockroach Poker is a game played with a special deck of 64 cards which feature 8 creature types (COCKROACH, BAT, FLY, FROG, RAT, SCORPION, SPIDER, and STINKBUG). There are exactly 8 cards of each type. The deck is shuffled and dealt evenly between all players. The first player chooses a card from their hand and passes it to any other player face down, claiming it to be a specific type of card. The receiving player can either accept or pass:
         Accept: announce whether they believe the statement is a lie or not and then accept the card. If the player's belief is correct then the passing player takes back the card, and if its incorrect then the receiving player takes it. The card is then laid out face up in front of the respective player.
@@ -36,11 +31,11 @@ class LlmPlayer(Player):
     """
 
     def __init__(self, name):
-        Player.__init__(self)
         self.name = name
         self.context += f"\nYour name is {name} and you are playing a game of Cockroach Poker."
 
     def generate_json_format(self, required_keys):
+        # Generate a JSON schema for the response.
         return {
         "type": "object",
         "properties": {
@@ -67,6 +62,7 @@ class LlmPlayer(Player):
     }
 
     def play(self, game_state, instructions, required_keys):
+        # Play move by getting a response from the LLM, given some context.
         generate_response = generate(
             model = self.name,
             prompt = '\n'.join([self.context, game_state, instructions, self.finetune_instructions]),
@@ -133,8 +129,8 @@ class Runner:
     types = ["COCKROACH", "BAT", "FLY", "FROG", "RAT", "SCORPION", "SPIDER", "STINKBUG"]
     deck = types * 8
 
-    def __init__(self, player_names):
-        self.players = {name: LlmPlayer(name) for name in player_names}  # map of player names -> Player objects.
+    def __init__(self, model_names):
+        self.players = {model_name: LlmPlayer(model_name) for model_name in model_names}  # map of player names -> Player objects.
         self.set_up_game()
 
     def chunk_cards_equally(self):

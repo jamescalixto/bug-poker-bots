@@ -2,7 +2,7 @@ from collections import Counter
 import json
 import random
 import traceback
-from ollama import chat, ChatResponse
+from ollama import generate
 
 
 class Player:
@@ -40,14 +40,39 @@ class LlmPlayer(Player):
         self.name = name
         self.context += f"\nYour name is {name} and you are playing a game of Cockroach Poker."
 
-    def play(self, game_state, instructions):
-        response: ChatResponse = chat(model=self.name, messages=[
-        {
-            'role': 'user',
-            'content': '\n'.join([self.context, game_state, instructions, self.finetune_instructions]),
+    def generate_json_format(self, required_keys):
+        return {
+        "type": "object",
+        "properties": {
+            "player": {
+                "type": "string"
+            },
+            "action": {
+                "type": "string"
+            },
+            "target": {
+                "type": "string"
+            },
+            "card": {
+                "type": "string"
+            },
+            "claim": {
+                "type": "string"
+            },
+            "reason": {
+                "type": "string"
+            },
         },
-        ])
-        return response.message.content
+        "required": required_keys
+    }
+
+    def play(self, game_state, instructions, required_keys):
+        generate_response = generate(
+            model = self.name,
+            prompt = '\n'.join([self.context, game_state, instructions, self.finetune_instructions]),
+            format = self.generate_json_format(required_keys)
+        )
+        return generate_response.response
 
 
 class Move:
@@ -148,11 +173,12 @@ class Runner:
                     return player, f"4x {card}"
         return None, None
 
-    def get_response_from_current_player(self, instructions):
+    def get_response_from_current_player(self, instructions, required_keys):
         # Get the parsed response from the current player.
         raw_response = self.players[self.current_player].play(
             self.write_revealed_state(self.current_player), 
-            instructions
+            instructions,
+            required_keys
         )
         raw_response = raw_response[raw_response.find("{"):raw_response.rfind("}")+1]  # trim to brackets.
         response = json.loads(raw_response)
@@ -167,8 +193,9 @@ class Runner:
                 f"You can claim your card is any one of the following: {self.types}.",
                 "Return a raw JSON object as a string with the keys 'card' (only the card you want to play, do not include the '1x', '2x', or '3x' count), 'target' (the player you want to pass to), 'claim' (the bug you claim your card is), and 'reason' (the reason why you chose this move)."
             ])
+            required_keys = ["card", "target", "claim", "reason"]
             try:
-                response = self.get_response_from_current_player(instructions)
+                response = self.get_response_from_current_player(instructions, required_keys)
                 for key in ["card", "target", "claim", "reason"]:
                     if key not in response:
                         raise ValueError(f"Missing key '{key}' in response.")
@@ -191,8 +218,9 @@ class Runner:
                 f"{last_move.target} passed a card to you and claimed it was a {last_move.claim}. You must determine whether this claim is TRUE or FALSE.",
                 "Return a raw JSON object as a string with the keys 'claim' (either TRUE or FALSE), and 'reason' (the reason why you think so)."
             ])
+            required_keys = ["claim", "reason"]
             try:
-                response = self.get_response_from_current_player(instructions)
+                response = self.get_response_from_current_player(instructions, required_keys)
                 for key in ["claim", "reason"]:
                     if key not in response:
                         raise ValueError(f"Missing key '{key}' in response.")
@@ -216,8 +244,9 @@ class Runner:
                 f"But remember, {last_move.target} claimed the card was a {last_move.claim}.",
                 "Return a raw JSON object as a string with the keys 'target' (the player you want to pass to), 'claim' (what you claim your card is), and 'reason' (the reason why you chose this move)."
             ])
+            required_keys = ["target", "claim", "reason"]
             try:
-                response = self.get_response_from_current_player(instructions)
+                response = self.get_response_from_current_player(instructions, required_keys)
                 for key in ["target", "claim", "reason"]:
                     if key not in response:
                         raise ValueError(f"Missing key '{key}' in response.")
@@ -233,11 +262,12 @@ class Runner:
             last_move = history[-1]
             instructions = "\n".join([
                 f"{last_move.target} passed a card to you and claimed it was a {last_move.claim}. You can either LOOK at the card and pass it to another player, or try to GUESS whether this claim is TRUE or FALSE.",
-                "If you want to LOOK at the card and pass it to another player, return a raw JSON object as a string with the keys 'action' (set to 'LOOK') and 'reason' (the reason why you want to look and pass the card.",
-                "If you want to GUESS whether this claim is TRUE or FALSE, return a raw JSON object as a string with the keys 'claim' (either TRUE or FALSE), and 'reason' (the reason why you think so).",
+                "If you want to LOOK at the card and pass it to another player, return a raw JSON object as a string with the keys 'action' (set to 'LOOK'), 'claim' (set to 'NONE') and 'reason' (the reason why you want to look and pass the card.",
+                "If you want to GUESS whether this claim is TRUE or FALSE, return a raw JSON object as a string with the keys 'action' (set to 'GUESS'), 'claim' (either TRUE or FALSE), and 'reason' (the reason why you think so).",
             ])
+            required_keys = ["action", "claim", "reason"]
             try:
-                response = self.get_response_from_current_player(instructions)
+                response = self.get_response_from_current_player(instructions, required_keys)
                 if "action" in response and response["action"] == "LOOK":  # chose to LOOK.
                     return Move(self.current_player, "LOOK", last_move.player, last_move.card, None, response["reason"])
                 else:  # chose to GUESS.
@@ -314,4 +344,4 @@ class Runner:
             history.extend(moves)
 
 
-Runner(["llama3.2", "gemma3", "qwen2.5", "mistral-nemo"]).play_game()
+Runner(["llama3.1:8b", "gemma3:4b", "qwen2.5:7b"]).play_game()

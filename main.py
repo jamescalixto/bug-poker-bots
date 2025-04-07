@@ -376,9 +376,6 @@ class Runner:
             round_loser, moves = self.play_round()
             losing_card = moves[-1].card
             print(f"{round_loser} lost that round and takes the {losing_card}.\n")
-            Move.print_header()
-            for m in moves:
-                print(m.__repr__())
             history.extend(moves)
         return history
 

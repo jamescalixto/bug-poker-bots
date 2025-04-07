@@ -31,7 +31,8 @@ class LlmPlayer():
         Other players can tell the truth when claiming what a card is. They do not have to lie.
     """
 
-    def __init__(self, name):
+    def __init__(self, model_name, name):
+        self.model_name = model_name
         self.name = name
         self.context += f"\nYour name is {name} and you are playing a game of Cockroach Poker."
 
@@ -69,7 +70,7 @@ class LlmPlayer():
         # Play move by getting a response from the LLM, given some context.
         # print("!!! PROMPT !!!", instructions)
         generate_response = generate(
-            model = self.name,
+            model = self.model_name,
             prompt = '\n'.join([self.context, game_state, instructions, self.finetune_instructions]),
             format = self.generate_json_format(required_keys)
         )
@@ -151,7 +152,16 @@ class Runner:
     deck = types * 8
 
     def __init__(self, model_names):
-        self.players = {model_name: LlmPlayer(model_name) for model_name in model_names}  # map of player names -> Player objects.
+        self.multiple_same_models = {n for n in model_names if model_names.count(n) > 1}  # set of all model names that appear more than once.
+        self.model_names_counter = Counter()
+        self.players = dict()  # map of player names -> Player objects.
+        for model_name in model_names:
+            self.model_names_counter[model_name] += 1
+            if model_name in self.multiple_same_models:
+                name = f"{model_name}_{self.model_names_counter[model_name]}"
+            else:
+                name = model_name
+            self.players[name] = LlmPlayer(model_name, name)
         self.losses = Counter()
         self.set_up_game()
 
@@ -393,5 +403,6 @@ class Runner:
 
 
 
-runner = Runner(["gemma3:4b", "qwen2.5:7b", "llama3.1:8b"])
+# runner = Runner(["gemma3:4b", "qwen2.5:7b", "llama3.1:8b"])
+runner = Runner(["gemma3:4b", "gemma3:4b", "gemma3:4b"])
 runner.play_games(100)

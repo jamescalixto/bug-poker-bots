@@ -238,6 +238,7 @@ class Runner:
             ])
             required_keys = ["target", "card", "claim", "reason"]
             try:
+                print("current hand is:", self.get_enumerated_cards(self.player_hands[self.current_player]))
                 response = self.get_response_from_current_player(instructions, required_keys)
                 for key in ["card", "target", "claim", "reason"]:
                     if key not in response:
@@ -401,8 +402,5 @@ class Runner:
             print("\n\n")
         
 
-
-
-# runner = Runner(["gemma3:4b", "qwen2.5:7b", "llama3.1:8b"])
-runner = Runner(["gemma3:4b", "gemma3:4b", "gemma3:4b"])
+runner = Runner(["gemma3:12b", "qwen2.5:14b", "phi4:14b", "mistral-nemo:12b"])
 runner.play_games(100)

@@ -85,14 +85,14 @@ class Move:
     max_card_length = 9
     max_guess_length = 7
 
-    def __init__(self, player, action, target, card, claim, guess, reason):
+    def __init__(self, player, action, target="", card="", claim="", guess="", reason=""):
         self.player = player
         self.action = action
-        self.target = target if target else ""
-        self.card = card if card else "" 
-        self.claim = claim if claim else ""
-        self.guess = guess if guess else ""
-        self.reason = reason if reason else ""
+        self.target = target
+        self.card = card
+        self.claim = claim
+        self.guess = guess
+        self.reason = reason
 
     @staticmethod
     def rtrunc(s, width):
@@ -234,9 +234,9 @@ class Runner:
                 f"You must play one of the cards from your hand: {self.get_enumerated_cards(self.player_hands[self.current_player])}.",
                 f"You can target the following players: {", ".join(valid_targets)}.",
                 f"You can claim your card is any one of the following: {self.types}.",
-                "Return a raw JSON object as a string with the keys 'card' (only the card you want to play, do not include the '1x', '2x', etc. count), 'target' (the player you want to pass to), 'claim' (the bug you claim your card is, you can either tell the truth or lie), and 'reason' (the reason why you chose this move)."
+                "Return a raw JSON object as a string with the keys 'target' (the player you want to pass to), 'card' (only the card you want to play, do not include the '1x', '2x', etc. count), 'claim' (the bug you claim your card is, you can either tell the truth or lie), and 'reason' (the reason why you chose this move)."
             ])
-            required_keys = ["card", "target", "claim", "reason"]
+            required_keys = ["target", "card", "claim", "reason"]
             try:
                 response = self.get_response_from_current_player(instructions, required_keys)
                 for key in ["card", "target", "claim", "reason"]:
@@ -251,10 +251,10 @@ class Runner:
                 if response["claim"] not in self.types:
                     raise ValueError(f"Player {self.current_player} claimed their card was a {response['claim']}, an invalid type.")
                 self.player_hands[self.current_player][response["card"]] -= 1  # decrement card count.
-                return Move(self.current_player, "PLAY", response["target"], response["card"], response["claim"], None, response["reason"])
+                return Move(self.current_player, "PLAY", target=response["target"], card=response["card"], claim=response["claim"], reason=response["reason"])
             except Exception as e:
                 print(e, traceback.format_exc())
-                return Move(self.current_player, "FORFEIT", None, None, None, None, f"Error parsing response: {e}")
+                return Move(self.current_player, "FORFEIT", reason=f"Error parsing response: {e}")
         elif len(valid_targets) == 0:  # forced last move of the round. Must guess.
             last_move = history[-1]
             instructions = "\n".join([
@@ -275,15 +275,15 @@ class Runner:
                 response["guess"] = response["guess"].upper()
                 if response["guess"] not in ["TRUE", "FALSE"]:
                     raise ValueError(f"Guess must be either TRUE or FALSE.")
-                return Move(self.current_player, "GUESS", last_move.player, last_move.card, last_move.claim, response["guess"], response["reason"])
+                return Move(self.current_player, "GUESS", target=last_move.player, card=last_move.card, claim=last_move.claim, guess=response["guess"], reason=response["reason"])
             except Exception as e:
                 print(e, traceback.format_exc())
-                return Move(self.current_player, "FORFEIT", None, last_move.card, None, None, f"Error parsing response: {e}")
+                return Move(self.current_player, "FORFEIT", card=last_move.card, reason=f"Error parsing response: {e}")
         elif history[-1].action == "LOOK":  # looked at card last round, must pass.
             last_move = history[-1]
             instructions = "\n".join([
                 self.get_all_claims_this_round(history),
-                f"You looked at the card that {last_move.target} passed to you and claimed it was a {last_move.claim}. It {'really is' if last_move.claim == last_move.card else 'is actually'} a {last_move.card}.",
+                f"You looked at the card that {last_move.target} passed to you. It is a {last_move.card}, {'and' if last_move.claim == last_move.card else 'but'} {last_move.player} claimed it was a {last_move.claim}.",
                 f"You need to pass the card to another player. You can pass to the following players: {", ".join(valid_targets)}."
                 f"You can claim your card is any one of the following: {self.types}.",
                 f"But remember, {last_move.target} claimed the card was a {last_move.claim}.",
@@ -299,10 +299,10 @@ class Runner:
                     raise ValueError(f"Player {response['target']} is not a valid target.")
                 if response["claim"] not in self.types:
                     raise ValueError(f"Player {response['target']} claimed their card was a {response['claim']}, an invalid type.")
-                return Move(self.current_player, "PASS", response["target"], last_move.card, last_move.claim, None, response["reason"])
+                return Move(self.current_player, "PASS", target=response["target"], card=last_move.card, claim=response["claim"], reason=response["reason"])
             except Exception as e:
                 print(e, traceback.format_exc())
-                return Move(self.current_player, "FORFEIT", None, last_move.card, None, None, f"Error parsing response: {e}")
+                return Move(self.current_player, "FORFEIT", card=last_move.card, reason=f"Error parsing response: {e}")
         else:  # can decide whether to LOOK at card or GUESS.
             last_move = history[-1]
             instructions = "\n".join([
@@ -315,7 +315,7 @@ class Runner:
             try:
                 response = self.get_response_from_current_player(instructions, required_keys)
                 if "action" in response and response["action"] == "LOOK":  # chose to LOOK.
-                    return Move(self.current_player, "LOOK", last_move.player, last_move.card, last_move.claim, None, response["reason"])
+                    return Move(self.current_player, "LOOK", target=last_move.player, card=last_move.card, claim=last_move.claim, reason=response["reason"])
                 else:  # chose to GUESS.
                     for key in ["guess", "reason"]:
                         if key not in response:
@@ -327,10 +327,10 @@ class Runner:
                     response["guess"] = response["guess"].upper()
                     if response["guess"] not in ["TRUE", "FALSE"]:
                         raise ValueError(f"Guess must be either TRUE or FALSE.")
-                    return Move(self.current_player, "GUESS", last_move.player, last_move.card, last_move.claim, response["guess"], response["reason"])
+                    return Move(self.current_player, "GUESS", target=last_move.player, card=last_move.card, claim=last_move.claim, guess=response["guess"], reason=response["reason"])
             except Exception as e:
                 print(e, traceback.format_exc())
-                return Move(self.current_player, "FORFEIT", None, last_move.card, None, None, f"Error parsing response: {e}")
+                return Move(self.current_player, "FORFEIT", card=last_move.card, reason=f"Error parsing response: {e}")
             
 
     def play_round(self):
